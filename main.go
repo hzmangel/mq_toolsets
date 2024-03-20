@@ -5,6 +5,7 @@ import (
 	"flag"
 	"mq_perf_test/internal"
 	"mq_perf_test/internal/rabbitmq"
+	"mq_perf_test/internal/redis"
 	"net/url"
 	"os"
 	"strings"
@@ -15,33 +16,13 @@ import (
 
 var err error
 
-type appConfig struct {
-	Uri string `json:"uri" yaml:"uri"`
-
-	//// goroutine number and number of each goroutine
-	//Concurrency      int `json:"concurrency" yaml:"concurrency"`
-	//MsgCountPerRound int `json:"msg_count" yaml:"msg_count"`
-	//
-	//// How many queues will be launched in total, here are different means in different brokers
-	//// For rmq: the queue count means topic exchange count
-	//// For redis pubsub: the queue count means pubsub channel count
-	//// For redis stream: TODO
-	//QueueCount int `json:"queue_count" yaml:"queue_count"`
-
-	// Publishers
-	Publishers []*internal.PublisherConfig `json:"publishers" yaml:"publishers"`
-
-	// Subscribers
-	Subscribers []*internal.SubscriberConfig `json:"subscribers" yaml:"subscribers"`
-}
-
-func loadConfigFile(configFile string) *appConfig {
+func loadConfigFile(configFile string) *internal.AppConfig {
 	configBytes, err := os.ReadFile(configFile)
 	if err != nil {
 		panic(err)
 	}
 
-	var cfg appConfig
+	var cfg internal.AppConfig
 	if strings.HasSuffix(configFile, "yaml") {
 		err = yaml.Unmarshal(configBytes, &cfg)
 		if err != nil {
@@ -77,16 +58,20 @@ func main() {
 	switch uri.Scheme {
 
 	case "amqp":
-		// Build publishers
-		pubC := rabbitmq.CreateAmqpClient(cfg.Uri)
+		pubC := rabbitmq.CreateClient(cfg.Uri)
 		pubC.BuildPublishers(cfg.Publishers)
 
-		subC := rabbitmq.CreateAmqpClient(cfg.Uri)
+		subC := rabbitmq.CreateClient(cfg.Uri)
 		subC.BuildSubscribers(cfg.Subscribers)
 
-		subC.StartSubscribers(cfg.Subscribers)
+		internal.LatencyTest(pubC, subC, cfg)
+	case "redis":
+		pubC := redis.CreateClient(cfg.Uri)
+		pubC.BuildPublishers(cfg.Publishers)
 
-		pubC.StartPublishers(cfg.Publishers)
-		select {}
+		subC := redis.CreateClient(cfg.Uri)
+		subC.BuildSubscribers(cfg.Subscribers)
+
+		internal.LatencyTest(pubC, subC, cfg)
 	}
 }

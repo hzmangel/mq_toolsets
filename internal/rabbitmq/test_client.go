@@ -14,7 +14,7 @@ import (
 
 var err error
 
-type AmqpTestClient struct {
+type TestClient struct {
 	conn *amqp.Connection
 	ch   *amqp.Channel
 
@@ -24,14 +24,14 @@ type AmqpTestClient struct {
 	exchangeQueueMapping map[string][]string
 }
 
-func CreateAmqpClient(uri string) *AmqpTestClient {
+func CreateClient(uri string) *TestClient {
 	log.Debug().Msgf("amqp uri: %s", uri)
 	conn, err := amqp.Dial(uri)
 	if err != nil {
 		panic(err)
 	}
 
-	c := &AmqpTestClient{conn: conn}
+	c := &TestClient{conn: conn}
 
 	c.Init()
 
@@ -39,7 +39,7 @@ func CreateAmqpClient(uri string) *AmqpTestClient {
 }
 
 // Init connect the amqp server and create channel
-func (c *AmqpTestClient) Init() {
+func (c *TestClient) Init() {
 	c.ch, err = c.conn.Channel()
 	if err != nil {
 		panic(err)
@@ -49,7 +49,7 @@ func (c *AmqpTestClient) Init() {
 }
 
 // BuildPublishers in rmq branch, only declare the exchanges
-func (c *AmqpTestClient) BuildPublishers(pubConfigs []*internal.PublisherConfig) {
+func (c *TestClient) BuildPublishers(pubConfigs []*internal.PublisherConfig) {
 	c.PubConfigs = pubConfigs
 	for _, pubConf := range c.PubConfigs {
 		// create exchange
@@ -59,12 +59,12 @@ func (c *AmqpTestClient) BuildPublishers(pubConfigs []*internal.PublisherConfig)
 		}
 	}
 }
-func (c *AmqpTestClient) StartPublishers(pubConfigs []*internal.PublisherConfig) {
+func (c *TestClient) StartPublishers(pubConfigs []*internal.PublisherConfig) {
 	for _, pubConfig := range pubConfigs {
 		log.Debug().Msgf("publish config: %+v", pubConfig)
 		for i := range pubConfig.ConcurrencyCount {
 			go func(i int) {
-				log.Debug().Msgf("start publisher %d", i)
+				//log.Debug().Msgf("start publisher %d", i)
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
 
@@ -88,7 +88,7 @@ func (c *AmqpTestClient) StartPublishers(pubConfigs []*internal.PublisherConfig)
 }
 
 // BuildSubscribers in rmq branch, declare exchanges, create queue and bind queue with exchange and routing key
-func (c *AmqpTestClient) BuildSubscribers(subConfigs []*internal.SubscriberConfig) {
+func (c *TestClient) BuildSubscribers(subConfigs []*internal.SubscriberConfig) {
 	c.SubConfigs = subConfigs
 	for _, subConf := range subConfigs {
 		// create exchange
@@ -119,7 +119,7 @@ func (c *AmqpTestClient) BuildSubscribers(subConfigs []*internal.SubscriberConfi
 	}
 }
 
-func (c *AmqpTestClient) StartSubscribers(subConfigs []*internal.SubscriberConfig) {
+func (c *TestClient) StartSubscribers(subConfigs []*internal.SubscriberConfig, tsDiffCh chan int64) {
 	for _, subConfig := range subConfigs {
 		if queues, ok := c.exchangeQueueMapping[subConfig.Topic]; ok {
 			for _, qName := range queues {
@@ -127,7 +127,7 @@ func (c *AmqpTestClient) StartSubscribers(subConfigs []*internal.SubscriberConfi
 				if err != nil {
 					panic(err)
 				}
-				go processMsg(deliveries)
+				go processMsg(deliveries, tsDiffCh)
 			}
 		} else {
 			log.Debug().Msgf("no queue bind: %s", subConfig.Topic)
@@ -136,25 +136,13 @@ func (c *AmqpTestClient) StartSubscribers(subConfigs []*internal.SubscriberConfi
 	}
 }
 
-func processMsg(deliveries <-chan amqp.Delivery) {
+func processMsg(deliveries <-chan amqp.Delivery, tsDiffCh chan int64) {
 	for d := range deliveries {
 		//log.Printf("got %dB delivery: [%v] %q", len(d.Body), d.DeliveryTag, d.Body)
 		sendTs, _, err := varint.UnmarshalInt64(d.Body)
 		if err != nil {
 			panic(err)
 		}
-		log.Printf("ts diff: %d", time.Now().UnixMilli()-sendTs)
+		tsDiffCh <- time.Now().UnixMilli() - sendTs
 	}
-}
-
-// LatencyTest publish messages with publishers, and consume messages with subscribers.
-func LatencyTest(pubClient, subClient *AmqpTestClient) {
-	if len(pubClient.PubConfigs) == 0 {
-		panic("no publisher")
-	}
-
-	if len(subClient.SubConfigs) == 0 {
-		panic("no subscriber")
-	}
-
 }
