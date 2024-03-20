@@ -67,6 +67,7 @@ func LatencyTest(pubClient PublishClient, subClient SubscribeClient, cfg *AppCon
 	tsDiffCh := make(chan int64)
 	totalMsgCnt := lo.Sum(lo.Map(cfg.Publishers, func(c *PublisherConfig, _ int) int { return c.ConcurrencyCount * c.MessageCount }))
 	go subClient.StartSubscribers(cfg.Subscribers, tsDiffCh)
+	time.Sleep(time.Second)
 	go pubClient.StartPublishers(cfg.Publishers)
 
 	var tsDiffData []int64
