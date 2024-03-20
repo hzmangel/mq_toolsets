@@ -1,0 +1,13 @@
+uri: "amqp://guest:guest@localhost:5672"
+publishers:
+    - topic: "test"
+      routing_key: "test"
+      concurrency_count: 10000
+      message_count: 10
+      auto_delete: false
+subscribers:
+    - topic: "test"
+      routing_key: "test"
+      auto_delete_exchange: false
+      auto_delete_queue: false
+      auto_ack: true
