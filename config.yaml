@@ -1,5 +1,5 @@
-uri: "amqp://lalala:newspaper@localhost:5672"
-#uri: "redis://@localhost:6379"
+#uri: "amqp://lalala:newspaper@localhost:5672"
+uri: "redis://@localhost:6379"
 publishers:
     - topic: "test"
       routing_key: "test"
