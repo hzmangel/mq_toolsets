@@ -19,7 +19,7 @@ jobs:
           cache-dependency-path: subdir/go.sum
 
       - name: Install dependencies
-        run: go get .
+        run: go get ./...
 
       - name: Build
         run: make
